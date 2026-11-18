@@ -5,8 +5,8 @@ import io.vertx.core.Vertx;
 public class FSStatEventLoopExample {
 
     public static void main(String[] args) {
-        String dir = args.length > 0 ? args[0] : System.getProperty("user.dir");
-        long maxFS = args.length > 1 ? Long.parseLong(args[1]) : 1_000_000L;
+        String dir = args.length > 0 ? args[0] : "C:\\Users\\filip\\Desktop\\Magistrale";
+        long maxFS = args.length > 1 ? Long.parseLong(args[1]) : 500_000L;
         int nBands = args.length > 2 ? Integer.parseInt(args[2]) : 5;
         System.out.println("FSStat Event-Loop (Vert.x) Example ");
         System.out.printf("Scanning directory: %s (MaxFS: %d bytes, NB: %d)%n%n", dir, maxFS, nBands);
