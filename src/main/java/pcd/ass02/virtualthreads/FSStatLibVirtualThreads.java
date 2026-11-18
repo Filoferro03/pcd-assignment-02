@@ -8,9 +8,10 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
@@ -37,7 +38,7 @@ public class FSStatLibVirtualThreads {
         final ReentrantLock stateLock = new ReentrantLock();
         final long[] bands = new long[nBands + 1];
         final long[] totalFiles = new long[]{0L};
-        final boolean[] stopped = new boolean[]{false};
+        final AtomicBoolean stopped = new AtomicBoolean(false);
         final long[] lastUpdateTs = new long[]{0L};
         ExecutorService virtualExecutor = Executors.newVirtualThreadPerTaskExecutor();
         Future<FSReport> futureResult = virtualExecutor.submit(() -> {
@@ -65,13 +66,13 @@ public class FSStatLibVirtualThreads {
 
             @Override
             public void stop() {
-                stopped[0] = true;
+                stopped.set(true);
                 virtualExecutor.shutdownNow();
             }
 
             @Override
             public boolean isStopped() {
-                return stopped[0];
+                return stopped.get();
             }
         };
     }
@@ -81,24 +82,24 @@ public class FSStatLibVirtualThreads {
                                      final int nBands,
                                      final long[] bands,
                                      final long[] totalFiles,
-                                     final boolean[] stopped,
+                                     final AtomicBoolean stopped,
                                      final long[] lastUpdateTs,
                                      final Consumer<FSReport> onProgress,
                                      final ReentrantLock stateLock,
                                      final ExecutorService executor) {
-        if (stopped[0] || Thread.currentThread().isInterrupted()) {
+        if (stopped.get() || Thread.currentThread().isInterrupted()) {
             return;
         }
         try (Stream<Path> stream = Files.list(currentDir)) {
-            List<java.util.concurrent.Future<?>> subtasks = new ArrayList<>();
+            List<Future<?>> subtasks = new ArrayList<>();
             stream.forEach(entry -> {
-                if (stopped[0] || Thread.currentThread().isInterrupted()) {
+                if (stopped.get() || Thread.currentThread().isInterrupted()) {
                     return;
                 }
                 try {
                     BasicFileAttributes attrs = Files.readAttributes(entry, BasicFileAttributes.class);
                     if (attrs.isDirectory()) {
-                        java.util.concurrent.Future<?> subtask = executor.submit(() -> {
+                        Future<?> subtask = executor.submit(() -> {
                             exploreConcurrently(entry, maxFS, nBands, bands, totalFiles,
                                     stopped, lastUpdateTs, onProgress, stateLock, executor);
                         });
@@ -127,14 +128,16 @@ public class FSStatLibVirtualThreads {
                             onProgress.accept(snapshot);
                         }
                     }
-                } catch (IOException ignored) {}
+                } catch (IOException ignored) {
+                }
             });
-            for (java.util.concurrent.Future<?> subtask : subtasks) {
+            for (Future<?> subtask : subtasks) {
                 try {
                     subtask.get();
                 } catch (Exception ignored) {
                 }
             }
-        } catch (IOException ignored) {}
+        } catch (IOException ignored) {
+        }
     }
 }
